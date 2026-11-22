@@ -1407,6 +1407,10 @@ body.zen-mode .hotspot-layer {
   display: none;
 }
 
+.mobile-pose-rail {
+  display: none;
+}
+
 .skin-dot-mini {
   width: 8px;
   height: 8px;
@@ -1493,9 +1497,53 @@ body.zen-mode .hotspot-layer {
     min-height: 32px;
   }
 
-  /* 精简悬浮底栏（44px 触控友好热区 + 底部安全区） */
+  /* 视角栏正下方的快捷动作预设条（直接点击切换 6 种核心动作，不挡视野） */
+  .mobile-pose-rail {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    width: 100%;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    padding: 3px 2px;
+  }
+
+  .mobile-pose-rail::-webkit-scrollbar {
+    display: none;
+  }
+
+  .m-pose-btn {
+    flex: 0 0 auto;
+    appearance: none;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(18, 24, 36, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    color: rgba(235, 242, 252, 0.88);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.16s var(--ease-apple);
+  }
+
+  .m-pose-btn.active {
+    color: #ffffff;
+    font-weight: 600;
+    background: linear-gradient(145deg, rgba(100, 210, 255, 0.34), rgba(66, 170, 228, 0.20));
+    border-color: rgba(148, 232, 255, 0.72);
+    box-shadow: 0 0 12px rgba(100, 210, 255, 0.25);
+  }
+
+  /* 精简悬浮底栏（5 按钮单排不挤，含沉浸模式） */
   .hud-bottom-dock {
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    bottom: calc(10px + env(safe-area-inset-bottom));
     left: 10px;
     right: 10px;
     transform: none;
@@ -1505,27 +1553,27 @@ body.zen-mode .hotspot-layer {
   .action-dock {
     width: 100%;
     justify-content: space-between;
-    padding: 5px 6px;
-    gap: 4px;
+    padding: 4px 5px;
+    gap: 3px;
   }
 
   .dock-btn {
     flex: 1 1 auto;
-    padding: 9px 8px;
-    font-size: 12px;
-    min-height: 38px;
+    padding: 8px 4px;
+    font-size: 11.5px;
+    min-height: 36px;
     justify-content: center;
     white-space: nowrap;
   }
 
-  /* 控制面板变为底部优雅滑出的 Apple 液态玻璃抽屉（默认收起不挡 3D 主体） */
+  /* 控制面板变为紧凑型底部浅抽屉（仅 34dvh，不遮挡机械手实时演示！） */
   .control-panel {
     top: auto;
     right: 10px;
     left: 10px;
-    bottom: calc(68px + env(safe-area-inset-bottom));
+    bottom: calc(60px + env(safe-area-inset-bottom));
     width: auto;
-    max-height: 54dvh;
+    max-height: 34dvh;
     border-radius: 20px;
     opacity: 0;
     pointer-events: none;
@@ -1540,8 +1588,24 @@ body.zen-mode .hotspot-layer {
     transform: translateY(0) scale(1);
   }
 
+  .panel-header {
+    padding: 10px 14px;
+  }
+
+  /* 手机端右上角醒目「收起 ▾」胶囊按钮 */
+  .panel-collapse-btn {
+    padding: 4px 11px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #ffffff;
+    background: rgba(100, 210, 255, 0.24);
+    border: 1px solid rgba(148, 232, 255, 0.56);
+  }
+
   .panel-body {
-    max-height: calc(54dvh - 96px);
+    max-height: calc(34dvh - 88px);
+    padding: 10px 14px 14px;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
   }
@@ -1563,7 +1627,7 @@ body.zen-mode .hotspot-layer {
   .tracker-pip {
     left: auto;
     right: 10px;
-    top: calc(104px + env(safe-area-inset-top));
+    top: calc(138px + env(safe-area-inset-top));
     bottom: auto;
     width: 136px;
     border-radius: 14px;

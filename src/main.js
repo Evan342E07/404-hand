@@ -456,6 +456,7 @@ async function boot() {
   // === 摄像头实时手势追踪 & AR 实景机械手替换绑定（MediaPipe Hands · 手机优先后置镜头） ===
   const camTrackBtn = document.getElementById('camera-track-btn');
   const camBtnLabel = document.getElementById('camera-btn-label');
+  if (camBtnLabel) camBtnLabel.textContent = isMobileDevice ? '手势' : '手势追踪';
   const trackerArBtn = document.getElementById('tracker-ar-btn');
   const trackerFlipBtn = document.getElementById('tracker-flip-btn');
   const trackerCloseBtn = document.getElementById('tracker-close-btn');
@@ -499,14 +500,22 @@ async function boot() {
     onStateChange: ({ active, arMode, error }) => {
       camTrackBtn?.classList.toggle('tracking', Boolean(active));
       if (camBtnLabel) {
-        camBtnLabel.textContent = active ? (arMode ? 'AR 替换中' : '追踪中') : '手势追踪';
+        if (isMobileDevice) {
+          camBtnLabel.textContent = active ? (arMode ? 'AR中' : '追踪中') : '手势';
+        } else {
+          camBtnLabel.textContent = active ? (arMode ? 'AR 替换中' : '追踪中') : '手势追踪';
+        }
       }
       if (error) showRecToast(error);
     },
     onArModeChange: (arActive) => {
       setArVisualState(arActive);
       if (camBtnLabel && handTracker.active) {
-        camBtnLabel.textContent = arActive ? 'AR 替换中' : '追踪中';
+        if (isMobileDevice) {
+          camBtnLabel.textContent = arActive ? 'AR中' : '追踪中';
+        } else {
+          camBtnLabel.textContent = arActive ? 'AR 替换中' : '追踪中';
+        }
       }
     },
     onArTransform: (tf) => {

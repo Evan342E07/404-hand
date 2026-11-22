@@ -95,6 +95,9 @@ export function initUI({
   const setMobileSheetOpen = (open) => {
     controlPanel?.classList.toggle('mobile-open', open);
     mobilePanelBtn?.classList.toggle('active', open);
+    if (collapseBtn && window.innerWidth <= 768) {
+      collapseBtn.textContent = open ? '收起 ▾' : '▾';
+    }
   };
 
   collapseBtn?.addEventListener('click', () => {
@@ -189,15 +192,21 @@ export function initUI({
     if (!nextMuted) audio.playUiClick();
   });
 
-  // Zen / Pure Showcase Mode (button + 'H' keyboard shortcut)
+  // Zen / Pure Showcase Mode (button + mobile zen button + 'H' keyboard shortcut)
   const zenBtn = document.getElementById('toggle-zen-btn');
+  const mobileZenBtn = document.getElementById('mobile-zen-btn');
   const exitZenBtn = document.getElementById('exit-zen-btn');
   const setZenMode = (enabled) => {
     document.body.classList.toggle('zen-mode', enabled);
     exitZenBtn?.classList.toggle('hidden', !enabled);
     zenBtn?.classList.toggle('active', enabled);
+    mobileZenBtn?.classList.toggle('active', enabled);
   };
   zenBtn?.addEventListener('click', () => {
+    audio?.playUiClick();
+    setZenMode(!document.body.classList.contains('zen-mode'));
+  });
+  mobileZenBtn?.addEventListener('click', () => {
     audio?.playUiClick();
     setZenMode(!document.body.classList.contains('zen-mode'));
   });
@@ -370,6 +379,7 @@ export function initUI({
     setActiveCamBtn('front');
     syncSkinUI('ceramic');
     document.querySelectorAll('.preset-btn').forEach((b) => b.classList.toggle('active', b.dataset.preset === 'open'));
+    document.querySelectorAll('.m-pose-btn').forEach((b) => b.classList.toggle('active', b.dataset.preset === 'open'));
     syncSlidersFromPose({ ...POSE_PRESETS.open, palmClarity: 0.78 });
     onResetAll?.();
   });
@@ -473,17 +483,21 @@ export function initUI({
   };
   rig.onChoreoStep = updateChoreoHUD;
 
-  // Pose Presets
+  // Pose Presets（右侧面板按钮 + 手机顶部快捷动作条双向同步）
   const presetBtns = document.querySelectorAll('.preset-btn');
+  const mobilePoseBtns = document.querySelectorAll('.m-pose-btn');
+  const triggerPosePreset = (preset) => {
+    audio?.playUiClick();
+    presetBtns.forEach((b) => b.classList.toggle('active', b.dataset.preset === preset));
+    mobilePoseBtns.forEach((b) => b.classList.toggle('active', b.dataset.preset === preset));
+    rig.applyPreset(preset);
+    syncSlidersFromPose(POSE_PRESETS[preset]);
+  };
   presetBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      audio?.playUiClick();
-      presetBtns.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const preset = btn.dataset.preset;
-      rig.applyPreset(preset);
-      syncSlidersFromPose(POSE_PRESETS[preset]);
-    });
+    btn.addEventListener('click', () => triggerPosePreset(btn.dataset.preset));
+  });
+  mobilePoseBtns.forEach((btn) => {
+    btn.addEventListener('click', () => triggerPosePreset(btn.dataset.preset));
   });
 
   return {
