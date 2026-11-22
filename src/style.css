@@ -1497,28 +1497,18 @@ body.zen-mode .hotspot-layer {
     min-height: 32px;
   }
 
-  /* 视角栏正下方的快捷动作预设条（直接点击切换 6 种核心动作，不挡视野） */
+  /* 视角栏正下方的 5 动作快捷预设条（5 等分刚好铺满整行，不挡视野） */
   .mobile-pose-rail {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 4px;
     width: 100%;
-    overflow-x: auto;
-    flex-wrap: nowrap;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x;
-    padding: 3px 2px;
-  }
-
-  .mobile-pose-rail::-webkit-scrollbar {
-    display: none;
+    padding: 2px 0;
   }
 
   .m-pose-btn {
-    flex: 0 0 auto;
     appearance: none;
-    padding: 5px 11px;
+    padding: 6px 2px;
     border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.16);
     background: rgba(18, 24, 36, 0.72);
@@ -1526,8 +1516,9 @@ body.zen-mode .hotspot-layer {
     -webkit-backdrop-filter: blur(20px) saturate(180%);
     color: rgba(235, 242, 252, 0.88);
     font-family: var(--font-sans);
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 500;
+    text-align: center;
     white-space: nowrap;
     cursor: pointer;
     transition: all 0.16s var(--ease-apple);
@@ -1619,9 +1610,29 @@ body.zen-mode .hotspot-layer {
 
   .choreo-pill {
     top: auto;
-    bottom: calc(72px + env(safe-area-inset-bottom));
+    bottom: calc(64px + env(safe-area-inset-bottom));
+    gap: 7px;
+    padding: 5px 11px;
     max-width: calc(100vw - 24px);
-    padding: 7px 12px;
+  }
+
+  .choreo-pill .choreo-label {
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+  }
+
+  .choreo-pill .choreo-steps {
+    gap: 4px;
+  }
+
+  .choreo-pill .choreo-step {
+    width: 20px;
+    height: 20px;
+    font-size: 10.5px;
+  }
+
+  .choreo-pill .choreo-dot {
+    font-size: 10px;
   }
 
   .tracker-pip {

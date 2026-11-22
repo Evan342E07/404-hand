@@ -472,7 +472,9 @@ export function initUI({
       choreoPill.classList.add('hidden');
       return;
     }
-    choreoLabel.textContent = info.label;
+    const isCount = info.steps?.length >= 5;
+    choreoPill.classList.toggle('is-compact-count', isCount);
+    choreoLabel.textContent = isCount ? '计数' : '404';
     choreoSteps.innerHTML = info.steps
       .map(
         (s, idx) =>

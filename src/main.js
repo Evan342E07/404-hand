@@ -523,14 +523,17 @@ async function boot() {
       if (!tf) {
         activeModelRoot.visible = true;
         activeModelRoot.position.set(0, 0, 0);
+        activeModelRoot.rotation.order = 'XYZ';
         activeModelRoot.rotation.set(0, 0, 0);
         activeModelRoot.scale.setScalar(1);
         return;
       }
       activeModelRoot.visible = Boolean(tf.visible);
       if (tf.visible) {
+        // 先绕 Z 随镜头平面倾斜，再绕手腕 Y 轴自由翻手（绝不覆盖 rig.js 的 forearmRot 翻手角！）
+        activeModelRoot.rotation.order = 'ZXY';
         activeModelRoot.position.set(tf.x, tf.y, 0);
-        activeModelRoot.rotation.set(0, 0, tf.rollZ);
+        activeModelRoot.rotation.z = tf.rollZ;
         activeModelRoot.scale.setScalar(tf.scale);
       }
     },

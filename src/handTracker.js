@@ -91,6 +91,7 @@ export class CameraHandTracker {
     this.arSmooth = { x: 0, y: 0, scale: 1.0, rollZ: 0, visible: false };
     this.hasHand = false;
     this.missedFrames = 0;
+    this.prevDampingSpeed = rig?.dampingSpeed || 1.0;
   }
 
   _setStatus(text, detected = false) {
@@ -264,7 +265,10 @@ export class CameraHandTracker {
 
       this.rig.activePreset = 'custom';
       this.rig.onChoreoStep?.(null);
-      document.querySelectorAll('.preset-btn').forEach((b) => b.classList.remove('active'));
+      document.querySelectorAll('.preset-btn, .m-pose-btn').forEach((b) => b.classList.remove('active'));
+      // 实时追踪期间大幅提升伺服响应速度，消除双层平滑延迟
+      this.prevDampingSpeed = this.rig.dampingSpeed || 1.0;
+      this.rig.dampingSpeed = 3.2;
 
       this._setStatus(this.arMode ? 'AR 对准人手即可替换' : '请将手放入镜头中', false);
       this.onStateChange?.({ active: true, facingMode: actualFacing, arMode: this.arMode });
@@ -316,6 +320,9 @@ export class CameraHandTracker {
       this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
     }
     if (!keepPipVisible) {
+      if (this.rig) {
+        this.rig.dampingSpeed = this.prevDampingSpeed || 1.0;
+      }
       this.arMode = false;
       this._syncArUI();
       this.onArTransform?.(null);
@@ -342,6 +349,7 @@ export class CameraHandTracker {
 
     const landmarks2D = result?.landmarks?.[0] || null;
     const worldLm = result?.worldLandmarks?.[0] || landmarks2D;
+    const handedness = result?.handednesses?.[0]?.[0]?.categoryName || 'Right';
 
     if (!this.arMode) {
       this._drawOverlay(landmarks2D);
@@ -366,11 +374,19 @@ export class CameraHandTracker {
       this._setStatus(this.arMode ? 'AR 实景机械手已锁定' : '追踪锁定 · 实时同步', true);
     }
 
-    const pose = this._solvePoseFromLandmarks(worldLm, landmarks2D);
-    const alpha = 0.38;
+    const pose = this._solvePoseFromLandmarks(worldLm, landmarks2D, handedness);
+    const alpha = 0.62;
     for (const k of Object.keys(pose)) {
-      this.smoothed[k] = lerp(this.smoothed[k], pose[k], alpha);
-      // AR 实景模式下平面旋转由整个手臂根节点 rollZ 精准承担，避免与 wristTilt 叠加过度倾斜
+      if (k === 'forearmRot') {
+        // 最短角度连续插值，支持 180° 掌心 <-> 手背无缝丝滑翻手！
+        let diff = pose.forearmRot - this.smoothed.forearmRot;
+        while (diff > 180) diff -= 360;
+        while (diff < -180) diff += 360;
+        this.smoothed.forearmRot += diff * 0.45;
+      } else {
+        this.smoothed[k] = lerp(this.smoothed[k], pose[k], alpha);
+      }
+
       if (this.arMode && k === 'wristTilt') {
         this.rig.setParam(k, 0);
       } else {
@@ -444,16 +460,16 @@ export class CameraHandTracker {
   }
 
   /**
-   * 21 关键点 3D 骨骼向量 → 机械手 5 指 + 张角 + 腕部姿态实时解算
+   * 21 关键点 3D 骨骼向量 → 机械手 5 指 + 张角 + 360° 翻手腕部姿态实时高敏解算
    */
-  _solvePoseFromLandmarks(w, n2d) {
+  _solvePoseFromLandmarks(w, n2d, handedness = 'Right') {
     const fingerCurl = (mcpIdx, pipIdx, dipIdx, tipIdx) => {
       const v0 = sub3(w[mcpIdx], w[0]);
       const v1 = sub3(w[pipIdx], w[mcpIdx]);
       const v2 = sub3(w[dipIdx], w[pipIdx]);
       const v3 = sub3(w[tipIdx], w[dipIdx]);
       const bend = angleBetween(v0, v1) * 0.52 + angleBetween(v1, v2) * 0.96 + angleBetween(v2, v3) * 0.52;
-      return clamp((bend - 0.22) / 2.05, 0, 1);
+      return clamp((bend - 0.26) / 1.55, 0, 1);
     };
 
     const index = fingerCurl(5, 6, 7, 8);
@@ -463,13 +479,13 @@ export class CameraHandTracker {
 
     const palmWidth = Math.max(0.03, len3(sub3(w[5], w[17])));
     const thumbAcross = len3(sub3(w[4], w[17])) / palmWidth;
-    const thumbAcrossCurl = clamp((1.62 - thumbAcross) / 0.92, 0, 1);
+    const thumbAcrossCurl = clamp((1.56 - thumbAcross) / 0.80, 0, 1);
 
     const t1 = sub3(w[2], w[1]);
     const t2 = sub3(w[3], w[2]);
     const t3 = sub3(w[4], w[3]);
-    const thumbJointCurl = clamp((angleBetween(t1, t2) + angleBetween(t2, t3) - 0.18) / 1.45, 0, 1);
-    const thumb = clamp(thumbAcrossCurl * 0.68 + thumbJointCurl * 0.32, 0, 1);
+    const thumbJointCurl = clamp((angleBetween(t1, t2) + angleBetween(t2, t3) - 0.16) / 1.25, 0, 1);
+    const thumb = clamp(thumbAcrossCurl * 0.65 + thumbJointCurl * 0.35, 0, 1);
 
     const dIdx = sub3(w[6], w[5]);
     const dMid = sub3(w[10], w[9]);
@@ -477,22 +493,30 @@ export class CameraHandTracker {
     const dPnk = sub3(w[18], w[17]);
     const avgGap = (angleBetween(dIdx, dMid) + angleBetween(dMid, dRng) + angleBetween(dRng, dPnk)) / 3;
     const avgCurl = (index + middle + ring + pinky) * 0.25;
-    const openSpread = clamp((avgGap - 0.08) / 0.36, 0, 1);
-    const spread = lerp(openSpread, -0.26, clamp((avgCurl - 0.55) / 0.4, 0, 1));
+    const openSpread = clamp((avgGap - 0.07) / 0.32, 0, 1);
+    const spread = lerp(openSpread, -0.28, clamp((avgCurl - 0.50) / 0.4, 0, 1));
 
     const dx2 = n2d[9].x - n2d[0].x;
     const dy2 = n2d[9].y - n2d[0].y;
     const tiltRad = Math.atan2(dx2, -dy2);
     const wristTilt = clamp(((tiltRad * 180) / Math.PI) * 0.65, -22, 22);
 
+    // 完整 360° 翻手角解算：利用掌面法向量 (nx, nz) + 左右手识别，手心朝镜头 0°，手背朝镜头 ±180°！
     const palmU = sub3(w[5], w[0]);
     const palmV = sub3(w[17], w[0]);
     const palmN = cross3(palmU, palmV);
     const nLen = len3(palmN);
-    const nx = palmN.x / nLen;
-    const ny = palmN.y / nLen;
-    const forearmRot = clamp(nx * 68, -72, 72);
-    const wristFlex = clamp(-ny * 34, -26, 28);
+    // 统一掌心法向量方向（无论左手还是右手，以及前置镜像，掌心朝前时 nz 为正）
+    const handSign = handedness === 'Left' ? -1 : 1;
+    const mirrorSign = this.isMirrored ? -1 : 1;
+    const nx = (palmN.x / nLen) * handSign * mirrorSign;
+    const ny = (palmN.y / nLen) * handSign;
+    const nz = (palmN.z / nLen) * handSign;
+
+    // 完整 [-180°, +180°] 翻手角：掌心朝镜头=0°，手背朝镜头=±180°
+    const flipRad = Math.atan2(nx, nz);
+    const forearmRot = (flipRad * 180) / Math.PI;
+    const wristFlex = clamp(-ny * 36, -28, 30);
 
     return { thumb, index, middle, ring, pinky, spread, wristFlex, wristTilt, forearmRot };
   }
