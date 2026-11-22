@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#141822" />
+    <title>404 BIONIC HAND STUDIO · 精密仿生交互实验室</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <video id="ar-bg-video" class="ar-bg-video hidden" autoplay playsinline muted></video>
+      <canvas id="viewport"></canvas>
+
+      <!-- 3D Spatial Callout Pins Layer -->
+      <div id="hotspot-layer" class="hotspot-layer"></div>
+
+      <!-- Hover Direct-Manipulation Micro Tooltip -->
+      <div id="hover-tooltip" class="hover-tooltip hidden"></div>
+
+      <!-- Drag & Drop GLB Overlay -->
+      <div id="drop-overlay" class="drop-overlay hidden">
+        <div class="drop-box">松开加载自定义 .GLB 精密机械手高模</div>
+      </div>
+
+      <!-- Reference Compare Ghost Overlay -->
+      <div id="ref-overlay" class="ref-overlay hidden">
+        <img id="ref-overlay-img" src="./ref/FRONT_final.png" alt="Reference" />
+      </div>
+
+      <!-- Top-Left Minimal Swiss Brand & Segmented Camera Rail -->
+      <header class="hud-header">
+        <div class="brand-strip">
+          <div class="brand-mark">404</div>
+          <div class="brand-info">
+            <div class="brand-title-row">
+              <h1>BIONIC HAND STUDIO</h1>
+              <span id="backend-badge" class="fps-pill">WebGPU · MRT</span>
+              <span id="fps-badge" class="fps-pill">60 FPS</span>
+            </div>
+          </div>
+        </div>
+
+        <nav class="camera-rail" role="group" aria-label="预设视角">
+          <button class="cam-btn active" data-view="front">正面·掌心</button>
+          <button class="cam-btn" data-view="back">背面·装甲</button>
+          <button class="cam-btn" data-view="threeQuarter">3/4 立体</button>
+          <button class="cam-btn" data-view="palmMacro">掌心透视</button>
+          <button class="cam-btn" data-view="wristDetail">腕部结构</button>
+        </nav>
+      </header>
+
+      <!-- Top-Center Minimal Choreography Stage Pill (visible only during Count / Sign 404!) -->
+      <div id="choreo-pill" class="choreo-pill hidden" aria-live="polite">
+        <span id="choreo-label" class="choreo-label">逐指计数 · 1 → 5</span>
+        <div id="choreo-steps" class="choreo-steps"></div>
+      </div>
+
+      <!-- Spatial Hotspot Glassmorphic Engineering Telemetry Card (Lower-Left Safe Zone) -->
+      <div id="telemetry-card" class="telemetry-card hidden">
+        <div class="tel-head">
+          <span id="tel-code" class="tel-code">H-02 · BIONIC BAY</span>
+          <button id="telemetry-close" class="icon-btn" title="关闭标注">✕</button>
+        </div>
+        <h2 id="tel-title">掌心仿生掌骨与神经脉络</h2>
+        <p id="tel-desc"></p>
+        <div id="tel-specs" class="tel-specs"></div>
+      </div>
+
+      <!-- Camera Hand Tracking Live PiP Monitor & AR Real-Hand Replacement Controls -->
+      <div id="tracker-pip" class="tracker-pip hidden">
+        <div class="tracker-head">
+          <span class="tracker-live-dot"></span>
+          <span id="tracker-status-text" class="tracker-status">准备中...</span>
+          <div class="tracker-tools">
+            <button id="tracker-ar-btn" class="tracker-pill-btn" title="切换全屏 AR 实景机械手替换模式">AR 实景</button>
+            <button id="tracker-flip-btn" class="tracker-icon-btn" title="切换前/后置摄像头" aria-label="切换前后摄像头">⇄</button>
+            <button id="tracker-close-btn" class="tracker-icon-btn" title="关闭手势追踪" aria-label="关闭手势追踪">✕</button>
+          </div>
+        </div>
+        <div class="tracker-stage">
+          <video id="tracker-video" autoplay playsinline muted></video>
+          <canvas id="tracker-canvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Bottom-Center Floating Swiss Glass Action Dock -->
+      <div class="hud-bottom-dock">
+        <!-- Studio Video Recorder Toast -->
+        <div id="record-toast" class="record-toast hidden" role="status" aria-live="polite"></div>
+
+        <!-- Studio Video Recorder Mode Popover -->
+        <div id="record-popover" class="record-popover hidden" role="menu" aria-label="选择录制模式">
+          <div class="rec-pop-title">录制高清演示视频 · 60 FPS</div>
+          <button id="rec-mode-canvas" class="rec-option" role="menuitem">
+            <span class="rec-opt-main">纯 3D 画布自录</span>
+            <span class="rec-opt-sub">手动操作演示 · 60 FPS 含音效 · 隐藏面板纯净成片</span>
+          </button>
+          <button id="rec-mode-screen" class="rec-option" role="menuitem">
+            <span class="rec-opt-main">完整页面自录（含 UI 交互）</span>
+            <span class="rec-opt-sub">免弹窗直录 · 连同控制面板、视角切换与点击光标</span>
+          </button>
+          <button id="rec-mode-demo" class="rec-option rec-option-accent" role="menuitem">
+            <span class="rec-opt-main">✦ 一键自动演示大片（16s）</span>
+            <span class="rec-opt-sub">自动运镜：捏取 · 握拳 · 404 · 流光腕环 · 爆炸图</span>
+          </button>
+        </div>
+
+        <div class="action-dock">
+          <button id="camera-track-btn" class="dock-btn dock-cam" title="开启摄像头实时手势追踪（手机优先后置镜头）">
+            <svg class="cam-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+            <span id="camera-btn-label">手势追踪</span>
+          </button>
+          <button id="toggle-hotspots-btn" class="dock-btn active dock-hide-sm" title="显示/隐藏 3D 结构探针">
+            <span class="dot-indicator"></span>结构探针
+          </button>
+          <button id="toggle-explode-btn" class="dock-btn" title="一键展开/闭合机械爆炸图">爆炸</button>
+          <button id="mobile-skin-btn" class="dock-btn dock-only-sm" title="切换外观涂装">
+            <span class="skin-dot-mini" id="mobile-skin-dot"></span>涂装
+          </button>
+          <button id="mobile-panel-btn" class="dock-btn dock-only-sm" title="展开/收起控制面板">控制</button>
+          <button id="restore-armor-btn" class="dock-btn dock-accent hidden" title="复原双击拆解的装甲">还原装甲</button>
+          <span class="dock-sep dock-hide-sm"></span>
+          <button id="record-menu-btn" class="dock-btn dock-rec dock-hide-sm" title="录制 60 FPS 网页演示视频">
+            <span class="rec-dot"></span><span id="record-btn-label">录制视频</span>
+          </button>
+          <button id="toggle-zen-btn" class="dock-btn dock-hide-sm" title="纯净沉浸展示模式 (快捷键 H)">沉浸视图</button>
+          <button id="reset-all-btn" class="dock-btn dock-hide-sm" title="重置姿态、拆解与相机">重置</button>
+        </div>
+        <div class="hint-micro">拖拽手指实时弯曲 · 双击白甲局部拆解 · 滚轮缩放特写 · 按 H 切换沉浸展示</div>
+      </div>
+
+      <!-- Floating Exit Zen Pill (visible only in Zen Mode) -->
+      <button id="exit-zen-btn" class="exit-zen-btn hidden">退出沉浸视图 (H)</button>
+
+      <!-- Right Compact Tabbed Swiss Precision Console -->
+      <aside id="control-panel" class="control-panel">
+        <div class="panel-header">
+          <div class="panel-heading">
+            <span class="status-led"></span>
+            <span class="panel-title">控制台 CONSOLE</span>
+          </div>
+          <div class="panel-actions">
+            <button id="toggle-mute-btn" class="icon-pill" title="静音/开启机械微音效">音效开</button>
+            <button id="collapse-panel-btn" class="icon-btn" title="收起/展开控制台">▾</button>
+          </div>
+        </div>
+
+        <!-- 3 Crisp Segmented Tabs (Zero Clutter, Zero Slider Wall!) -->
+        <div id="panel-tabs" class="panel-tabs" role="tablist">
+          <button class="tab-btn active" data-tab="stage" role="tab" aria-selected="true">展示</button>
+          <button class="tab-btn" data-tab="rig" role="tab" aria-selected="false">关节</button>
+          <button class="tab-btn" data-tab="lab" role="tab" aria-selected="false">视效</button>
+        </div>
+
+        <div id="panel-body" class="panel-body">
+          <!-- TAB 1: STAGE (Primary Showcase Controls) -->
+          <div class="tab-pane active" data-pane="stage">
+            <section class="ctrl-block">
+              <div class="block-label">姿态预设 · POSES</div>
+              <div class="preset-grid">
+                <button class="preset-btn active" data-preset="open">自然展开</button>
+                <button class="preset-btn" data-preset="relax">微曲呼吸</button>
+                <button class="preset-btn" data-preset="pinch">精密捏取</button>
+                <button class="preset-btn" data-preset="fist">握拳蓄力</button>
+                <button class="preset-btn" data-preset="point">食指点触</button>
+                <button class="preset-btn" data-preset="wave">波浪律动</button>
+                <button class="preset-btn preset-choreo" data-preset="count1to5">逐指计数</button>
+                <button class="preset-btn preset-choreo" data-preset="sign404">404 铭印</button>
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">外观涂装 · FINISH</div>
+              <div class="skin-grid" role="group" aria-label="外观涂装切换">
+                <button class="skin-btn active" data-skin="ceramic">
+                  <span class="skin-swatch" style="--swatch:#e4e8f0;--glow:#52ccff"></span>纳米纯白陶
+                </button>
+                <button class="skin-btn" data-skin="obsidian">
+                  <span class="skin-swatch" style="--swatch:#1a1e28;--glow:#ff9e2c"></span>曜石暗钛
+                </button>
+                <button class="skin-btn" data-skin="transparent">
+                  <span class="skin-swatch skin-swatch-glass" style="--swatch:#285468;--glow:#24f5df"></span>透明探索版
+                </button>
+                <button class="skin-btn" data-skin="sakura">
+                  <span class="skin-swatch skin-swatch-sakura" style="--swatch:#f5c2d4;--glow:#ff78b8"></span>樱花珠光粉
+                </button>
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">拆解与光学 · OPTICS &amp; EXPLODE</div>
+              <div class="precision-slider">
+                <div class="slider-meta">
+                  <span>装甲爆炸拆解</span>
+                  <output id="val-explode">0%</output>
+                </div>
+                <input id="ctrl-explode" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0" />
+              </div>
+
+              <div class="precision-slider">
+                <div class="slider-meta">
+                  <span>掌心光学罩通透度</span>
+                  <output id="val-palm-xray">78%</output>
+                </div>
+                <input id="ctrl-palm-xray" class="hairline-range" type="range" min="0.15" max="1" step="0.01" value="0.78" />
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">仿生动态 · BIO-MOTION</div>
+              <div class="switch-list">
+                <label class="swiss-switch">
+                  <span>微呼吸律动</span>
+                  <input id="ctrl-idle-motion" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+                <label class="swiss-switch">
+                  <span>生物电脉冲流</span>
+                  <input id="ctrl-pulse-motion" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+              </div>
+            </section>
+          </div>
+
+          <!-- TAB 2: RIG (18-Pivot Manual Telemetry & Servo Tuning) -->
+          <div class="tab-pane" data-pane="rig">
+            <section class="ctrl-block">
+              <div class="block-label">前臂与腕部 · WRIST</div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>腕部俯仰 (Flex)</span><output id="val-wrist-flex">0°</output></div>
+                <input id="ctrl-wrist-flex" class="hairline-range" type="range" min="-45" max="55" step="1" value="0" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>腕部侧摆 (Tilt)</span><output id="val-wrist-tilt">0°</output></div>
+                <input id="ctrl-wrist-tilt" class="hairline-range" type="range" min="-25" max="25" step="1" value="0" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>前臂旋前 (Pronation)</span><output id="val-forearm-rot">0°</output></div>
+                <input id="ctrl-forearm-rot" class="hairline-range" type="range" min="-90" max="90" step="1" value="0" />
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">五指独立伺服 · DIGITS</div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>五指张角 (Spread)</span><output id="val-spread">14%</output></div>
+                <input id="ctrl-spread" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0.14" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>拇指对掌 (Thumb)</span><output id="val-thumb">6%</output></div>
+                <input id="ctrl-thumb" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0.06" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>食指弯曲 (Index)</span><output id="val-index">4%</output></div>
+                <input id="ctrl-index" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0.04" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>中指弯曲 (Middle)</span><output id="val-middle">4%</output></div>
+                <input id="ctrl-middle" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0.04" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>无名指弯曲 (Ring)</span><output id="val-ring">5%</output></div>
+                <input id="ctrl-ring" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0.05" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>小指弯曲 (Pinky)</span><output id="val-pinky">6%</output></div>
+                <input id="ctrl-pinky" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0.06" />
+              </div>
+              <div class="precision-slider">
+                <div class="slider-meta"><span>伺服阻尼响应</span><output id="val-speed">1.0x</output></div>
+                <input id="ctrl-speed" class="hairline-range" type="range" min="0.3" max="2.5" step="0.1" value="1.0" />
+              </div>
+            </section>
+          </div>
+
+          <!-- TAB 3: LAB (Studio Lighting, Section Slicer, Cinema Optics & Custom GLB) -->
+          <div class="tab-pane" data-pane="lab">
+            <section class="ctrl-block">
+              <div class="block-label">影棚布光 · STUDIO MOOD</div>
+              <div class="mood-grid">
+                <button class="mood-btn active" data-mood="studio">工业炭黑棚</button>
+                <button class="mood-btn" data-mood="dramatic">冷峻轮廓光</button>
+                <button class="mood-btn" data-mood="sakura">星云柔粉棚</button>
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">WebGPU MRT 与剖切 · TSL PIPELINE</div>
+              <div class="precision-slider">
+                <div class="slider-meta">
+                  <span>3D 空间激光剖切</span>
+                  <output id="val-slice">关闭</output>
+                </div>
+                <input id="ctrl-slice" class="hairline-range" type="range" min="0" max="1" step="0.01" value="0" />
+              </div>
+              <div class="switch-list">
+                <label class="swiss-switch">
+                  <span>MRT SSGI 实时全局光照</span>
+                  <input id="ctrl-ssgi" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+                <label class="swiss-switch">
+                  <span>Compute 16K 空间粒子场</span>
+                  <input id="ctrl-compute-field" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+                <label class="swiss-switch">
+                  <span>色散 / 各向异性满血</span>
+                  <input id="ctrl-ultra-optics" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+                <label class="swiss-switch">
+                  <span>电影镜头 (微颗粒/暗角)</span>
+                  <input id="ctrl-cinema-lens" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+                <label class="swiss-switch">
+                  <span>暗玻台面 TSL 实时反射</span>
+                  <input id="ctrl-floor-reflect" type="checkbox" checked />
+                  <span class="switch-track"></span>
+                </label>
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">参考图叠影校对 · COMPARE</div>
+              <label class="swiss-switch">
+                <span>开启设计图叠影</span>
+                <input id="toggle-ref-chk" type="checkbox" />
+                <span class="switch-track"></span>
+              </label>
+              <div id="ref-controls" class="ref-subpanel hidden">
+                <div class="ref-btn-row">
+                  <button class="mini-btn active" data-ref="./ref/FRONT_final.png">正面定稿</button>
+                  <button class="mini-btn" data-ref="./ref/BACK_final.png">背面定稿</button>
+                </div>
+                <div class="precision-slider">
+                  <div class="slider-meta"><span>叠影透明度</span><output id="val-ref-opacity">35%</output></div>
+                  <input id="ref-opacity" class="hairline-range" type="range" min="0.1" max="0.85" step="0.05" value="0.35" />
+                </div>
+              </div>
+            </section>
+
+            <section class="ctrl-block">
+              <div class="block-label">模型替换 · ASSET LOADER</div>
+              <button id="upload-glb-btn" class="upload-btn">导入本地 .GLB 模型预览</button>
+              <input id="glb-file-input" type="file" accept=".glb" class="hidden" />
+            </section>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
