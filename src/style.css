@@ -1619,6 +1619,8 @@ body.zen-mode .hotspot-layer {
   .choreo-pill .choreo-label {
     font-size: 10.5px;
     letter-spacing: 0.04em;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .choreo-pill .choreo-steps {
