@@ -736,15 +736,50 @@ async function boot() {
     };
   }
 
-  gltfLoader.load(
-    './models/hand_404_rigged.glb?v=94',
-    (gltf) => mountGLBScene(gltf, ''),
-    undefined,
-    (err) => {
-      console.error('Failed to load GLB:', err);
-      showRecToast('3D 模型加载失败，请检查 ./models/hand_404_rigged.glb');
+  const modelLoaderPill = document.getElementById('model-loader-pill');
+  const modelLoaderText = document.getElementById('model-loader-text');
+  const modelLoaderRetry = document.getElementById('model-loader-retry');
+
+  const loadStudioGLB = (attempt = 0) => {
+    modelLoaderPill?.classList.remove('hidden');
+    modelLoaderRetry?.classList.add('hidden');
+    if (modelLoaderText) {
+      modelLoaderText.textContent =
+        attempt > 0 ? `正在重新连接加载模型 (第 ${attempt} 次)...` : '正在加载精密机械手高模...';
     }
-  );
+    const url = attempt > 0 ? `./models/hand_404_rigged.glb?v=94&retry=${attempt}` : './models/hand_404_rigged.glb?v=94';
+    gltfLoader.load(
+      url,
+      (gltf) => {
+        if (modelLoaderText) modelLoaderText.textContent = '正在编译材质与骨骼...';
+        mountGLBScene(gltf, '');
+        modelLoaderPill?.classList.add('hidden');
+      },
+      (xhr) => {
+        if (!modelLoaderText) return;
+        const total = xhr.total || 12463820;
+        const pct = Math.min(99, Math.round((xhr.loaded / total) * 100));
+        const loadedMb = (xhr.loaded / (1024 * 1024)).toFixed(1);
+        const totalMb = (total / (1024 * 1024)).toFixed(1);
+        modelLoaderText.textContent = `加载机械手高模 ${pct}% (${loadedMb}/${totalMb} MB)`;
+      },
+      (err) => {
+        console.error('Failed to load GLB:', err);
+        if (attempt < 2) {
+          setTimeout(() => loadStudioGLB(attempt + 1), 1200);
+          return;
+        }
+        if (modelLoaderText) {
+          modelLoaderText.textContent = '模型加载超时，请点击重试或用系统浏览器打开';
+        }
+        modelLoaderRetry?.classList.remove('hidden');
+        showRecToast('3D 模型加载失败，请点击屏幕中央「重试」');
+      }
+    );
+  };
+
+  modelLoaderRetry?.addEventListener('click', () => loadStudioGLB(1));
+  loadStudioGLB(0);
 
   // Window Drag & Drop GLB Preview
   const dropOverlay = document.getElementById('drop-overlay');
