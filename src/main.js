@@ -24,6 +24,7 @@ import { bloom } from 'three/examples/jsm/tsl/display/BloomNode.js';
 import { traa } from 'three/examples/jsm/tsl/display/TRAANode.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import './style.css';
 import { BionicAudioEngine } from './audio.js';
 import { createLabStudioHDRI } from './studioEnv.js';
@@ -360,7 +361,10 @@ async function boot() {
     return preset;
   }
 
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('./draco/');
   const gltfLoader = new GLTFLoader();
+  gltfLoader.setDRACOLoader(dracoLoader);
 
   function loadGLBFile(file) {
     if (!file || !file.name.toLowerCase().endsWith('.glb')) return;
@@ -747,7 +751,7 @@ async function boot() {
       modelLoaderText.textContent =
         attempt > 0 ? `正在重新连接加载模型 (第 ${attempt} 次)...` : '正在加载精密机械手高模...';
     }
-    const url = attempt > 0 ? `./models/hand_404_rigged.glb?v=94&retry=${attempt}` : './models/hand_404_rigged.glb?v=94';
+    const url = attempt > 0 ? `./models/hand_404_rigged.glb?v=95&retry=${attempt}` : './models/hand_404_rigged.glb?v=95';
     gltfLoader.load(
       url,
       (gltf) => {
@@ -757,7 +761,7 @@ async function boot() {
       },
       (xhr) => {
         if (!modelLoaderText) return;
-        const total = xhr.total || 12463820;
+        const total = xhr.total || 3647540;
         const pct = Math.min(99, Math.round((xhr.loaded / total) * 100));
         const loadedMb = (xhr.loaded / (1024 * 1024)).toFixed(1);
         const totalMb = (total / (1024 * 1024)).toFixed(1);
