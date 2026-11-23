@@ -66,8 +66,11 @@ export class CameraHandTracker {
     this.stream = null;
     this.rafId = null;
     this.lastVideoTime = -1;
-    // 手机默认优先后置摄像头（直接进入 AR 实景替换真手！）
-    this.facingMode = isMobile ? 'environment' : 'user';
+    this.lastDetectMs = 0;
+    this.lastFrameTickMs = 0;
+    // 无论桌面还是手机，默认优先前置摄像头 + 影棚实时跟随模式（所见即所得，举手即可看到骨骼与机械手同步）
+    // 如需用后置镜头体验 AR 实景机械手替换，可随时点击「⇄」翻面或点「AR 实景」开启
+    this.facingMode = 'user';
 
     this.pipEl = document.getElementById('tracker-pip');
     this.videoEl = document.getElementById('tracker-video');
@@ -108,27 +111,22 @@ export class CameraHandTracker {
       this.arBtnEl.textContent = this.arMode ? 'AR 开' : 'AR 实景';
     }
     if (this.arBgVideoEl) {
-      this.arBgVideoEl.classList.toggle('hidden', !this.arMode || !this.active);
+      this.arBgVideoEl.classList.toggle('ar-bg-hidden', !this.arMode || !this.active);
       this.arBgVideoEl.classList.toggle('is-mirrored', this.isMirrored);
     }
-    // 关键修复：永远只让当前可见的那一个 <video> 绑定并播放流，彻底避免隐藏视频暂停解码导致识别卡死！
+    // 保持主 videoEl 始终绑定并播放 stream，避免移动端切换 srcObject 导致 User Activation 过期被拦截！
     if (this.stream) {
+      if (this.videoEl) {
+        if (this.videoEl.srcObject !== this.stream) {
+          this.videoEl.srcObject = this.stream;
+        }
+        this.videoEl.play?.().catch(() => {});
+      }
       if (this.arMode && this.arBgVideoEl) {
         if (this.arBgVideoEl.srcObject !== this.stream) {
           this.arBgVideoEl.srcObject = this.stream;
         }
         this.arBgVideoEl.play?.().catch(() => {});
-        if (this.videoEl && this.videoEl.srcObject) {
-          this.videoEl.srcObject = null;
-        }
-      } else if (this.videoEl) {
-        if (this.videoEl.srcObject !== this.stream) {
-          this.videoEl.srcObject = this.stream;
-        }
-        this.videoEl.play?.().catch(() => {});
-        if (this.arBgVideoEl && this.arBgVideoEl.srcObject) {
-          this.arBgVideoEl.srcObject = null;
-        }
       }
     }
     document.body.classList.toggle('ar-live-mode', this.arMode && this.active);
@@ -152,43 +150,45 @@ export class CameraHandTracker {
   async _ensureLandmarker() {
     if (this.landmarker) return this.landmarker;
     this.loadingModel = true;
-    this._setStatus('加载 AI 手势模型中...', false);
+    this._setStatus('加载识别模型 (~22MB)...', false);
+    this.onStateChange?.({ active: false, loading: true });
 
-    const visionPkg = await import('@mediapipe/tasks-vision');
-    const { FilesetResolver, HandLandmarker } = visionPkg;
+    try {
+      const visionPkg = await import('@mediapipe/tasks-vision');
+      const { FilesetResolver, HandLandmarker } = visionPkg;
 
-    const wasmBase = new URL('./mediapipe/wasm', window.location.href).href;
-    const modelUrl = new URL('./mediapipe/hand_landmarker.task', window.location.href).href;
+      const wasmBase = new URL('./mediapipe/wasm', window.location.href).href;
+      const modelUrl = new URL('./mediapipe/hand_landmarker.task', window.location.href).href;
 
-    const vision = await FilesetResolver.forVisionTasks(wasmBase);
-    // 手机端优先走 SIMD WASM CPU（18ms/帧，不与 WebGPU/WebGL2 抢上下文，零卡死）；桌面优先 GPU
-    const delegates = this.isMobile ? ['CPU', 'GPU'] : ['GPU', 'CPU'];
-    let lastErr = null;
-    for (const del of delegates) {
-      try {
-        this.landmarker = await HandLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: modelUrl,
-            delegate: del,
-          },
-          runningMode: 'VIDEO',
-          numHands: 1,
-          minHandDetectionConfidence: 0.36,
-          minHandPresenceConfidence: 0.36,
-          minTrackingConfidence: 0.36,
-        });
-        break;
-      } catch (e) {
-        lastErr = e;
+      const vision = await FilesetResolver.forVisionTasks(wasmBase);
+      // 手机端优先走 SIMD WASM CPU（不与 WebGPU/WebGL2 抢上下文，零卡死）；桌面优先 GPU
+      const delegates = this.isMobile ? ['CPU', 'GPU'] : ['GPU', 'CPU'];
+      let lastErr = null;
+      for (const del of delegates) {
+        try {
+          this.landmarker = await HandLandmarker.createFromOptions(vision, {
+            baseOptions: {
+              modelAssetPath: modelUrl,
+              delegate: del,
+            },
+            runningMode: 'VIDEO',
+            numHands: 1,
+            minHandDetectionConfidence: 0.36,
+            minHandPresenceConfidence: 0.36,
+            minTrackingConfidence: 0.36,
+          });
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
       }
-    }
-    if (!this.landmarker) {
+      if (!this.landmarker) {
+        throw lastErr || new Error('AI 手势识别模型初始化失败');
+      }
+      return this.landmarker;
+    } finally {
       this.loadingModel = false;
-      throw lastErr || new Error('AI 手势识别模型初始化失败');
     }
-
-    this.loadingModel = false;
-    return this.landmarker;
   }
 
   async _openCameraStream(facingMode) {
@@ -230,11 +230,13 @@ export class CameraHandTracker {
 
     this.pipEl?.classList.remove('hidden');
     this._setStatus('请求摄像头授权...', false);
+    this.onStateChange?.({ active: false, loading: true });
 
     try {
       const stream = await this._openCameraStream(this.facingMode);
       this.stream = stream;
 
+      // 关键修复：趁浏览器还处于用户点击手势激活态（User Activation）内，立刻同步绑定并启动两个 video 解码！
       if (this.videoEl) {
         this.videoEl.srcObject = stream;
         this.videoEl.playsInline = true;
@@ -245,6 +247,7 @@ export class CameraHandTracker {
         this.arBgVideoEl.srcObject = stream;
         this.arBgVideoEl.playsInline = true;
         this.arBgVideoEl.muted = true;
+        this.arBgVideoEl.play().catch(() => {});
       }
 
       const trackSettings = stream.getVideoTracks()[0]?.getSettings?.() || {};
@@ -256,11 +259,13 @@ export class CameraHandTracker {
 
       this.active = true;
       this.lastVideoTime = -1;
+      this.lastDetectMs = 0;
+      this.lastFrameTickMs = 0;
       this.missedFrames = 0;
       this.hasHand = false;
 
-      // 手机后置摄像头开启时，自动激活 AR 实景机械手替换模式！
-      const shouldEnableAr = forceArMode !== null ? forceArMode : actualFacing === 'environment';
+      // 默认开启影棚实时跟随模式（可随时点 AR 实景切换），保留明确传入的 forceArMode
+      const shouldEnableAr = forceArMode !== null ? forceArMode : false;
       this.setArMode(shouldEnableAr);
 
       this.rig.activePreset = 'custom';
@@ -314,7 +319,7 @@ export class CameraHandTracker {
     if (this.videoEl) this.videoEl.srcObject = null;
     if (this.arBgVideoEl) {
       this.arBgVideoEl.srcObject = null;
-      this.arBgVideoEl.classList.add('hidden');
+      this.arBgVideoEl.classList.add('ar-bg-hidden');
     }
     if (this.overlayCtx && this.overlayCanvas) {
       this.overlayCtx.clearRect(0, 0, this.overlayCanvas.width, this.overlayCanvas.height);
@@ -333,13 +338,24 @@ export class CameraHandTracker {
   }
 
   _processFrame() {
-    // 关键：AR 模式使用全屏可见的 arBgVideoEl，普通模式使用 PiP 里的 videoEl，确保视频永远处于活跃解码状态！
-    const video = this.arMode ? this.arBgVideoEl : this.videoEl;
+    // 优先取当前可见的 video；若 arBgVideoEl 在部分手机端尚未 ready，无缝回退到一直活跃的 videoEl！
+    const primaryVideo = this.arMode ? this.arBgVideoEl : this.videoEl;
+    const video =
+      primaryVideo && primaryVideo.readyState >= 2 && primaryVideo.videoWidth > 0
+        ? primaryVideo
+        : this.videoEl;
     if (!video || video.readyState < 2 || video.videoWidth === 0 || !this.landmarker) return;
-    if (video.currentTime === this.lastVideoTime) return;
-    this.lastVideoTime = video.currentTime;
 
-    const nowMs = performance.now();
+    const nowRaw = performance.now();
+    // 兼容部分手机 WebView/Safari 视频流 currentTime 更新较慢的情况：若时间推进或间隔超过 48ms 即允许推理
+    if (video.currentTime === this.lastVideoTime && nowRaw - this.lastFrameTickMs < 48) return;
+    this.lastVideoTime = video.currentTime;
+    this.lastFrameTickMs = nowRaw;
+
+    // MediaPipe VIDEO 模式要求时间戳严格单调递增
+    const nowMs = Math.max(this.lastDetectMs + 1, Math.round(nowRaw));
+    this.lastDetectMs = nowMs;
+
     let result = null;
     try {
       result = this.landmarker.detectForVideo(video, nowMs);

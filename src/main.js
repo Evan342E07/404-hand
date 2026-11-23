@@ -497,10 +497,13 @@ async function boot() {
   const handTracker = new CameraHandTracker({
     rig,
     isMobile: isMobileDevice,
-    onStateChange: ({ active, arMode, error }) => {
+    onStateChange: ({ active, loading, arMode, error }) => {
       camTrackBtn?.classList.toggle('tracking', Boolean(active));
+      camTrackBtn?.classList.toggle('loading', Boolean(loading && !active));
       if (camBtnLabel) {
-        if (isMobileDevice) {
+        if (loading && !active) {
+          camBtnLabel.textContent = '加载中...';
+        } else if (isMobileDevice) {
           camBtnLabel.textContent = active ? (arMode ? 'AR中' : '追踪中') : '手势';
         } else {
           camBtnLabel.textContent = active ? (arMode ? 'AR 替换中' : '追踪中') : '手势追踪';

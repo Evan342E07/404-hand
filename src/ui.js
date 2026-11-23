@@ -22,12 +22,12 @@ export function computeSafeFrameCamera(basePos, baseTarget, width = window.inner
   const panelW = panelCollapsed ? 0 : width <= 1060 ? 256 : 284;
   const panelFrac = panelW / Math.max(400, width);
 
-  // 竖屏手机自动拉远取景框，保证整只机械手居中完整入镜且避开顶部视角条与精简底栏
+  // 竖屏手机适度微调取景，保证整只机械手尽量饱满大尺寸居中且避开上下精简栏
   let narrowBoost = 1.0;
   if (aspect < 0.85) {
-    narrowBoost = Math.min(1.56, 0.96 / Math.max(0.45, aspect));
+    narrowBoost = Math.min(1.22, 0.78 / Math.max(0.45, aspect));
   } else if (aspect < 1.35) {
-    narrowBoost = 1.16;
+    narrowBoost = 1.12;
   }
 
   const distVec = [
@@ -47,7 +47,7 @@ export function computeSafeFrameCamera(basePos, baseTarget, width = window.inner
   const rx = -fwdZ / fwdLen;
   const rz = fwdX / fwdLen;
 
-  const yOffset = isMobileSheet ? -0.35 : 0;
+  const yOffset = isMobileSheet ? 0.35 : 0;
   const target = [baseTarget[0] + rx * rightShift, baseTarget[1] + yOffset, baseTarget[2] + rz * rightShift];
   const pos = [target[0] + distVec[0], target[1] + distVec[1], target[2] + distVec[2]];
   return { pos, target };
