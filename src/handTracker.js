@@ -196,17 +196,18 @@ export class CameraHandTracker {
       throw new Error('当前页面需要 HTTPS 或 localhost 环境才能授权摄像头');
     }
 
-    // 640x480 在移动端推理速度是 720p 的 3-4 倍且识别极其精准
+    // 480x360 对 MediaPipe 224x224 模型输入已绰绰有余，可大幅降低手机端像素拷贝与解码延迟
     const tryConstraints = [
       {
         video: {
           facingMode: { ideal: facingMode },
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: this.isMobile ? 480 : 640 },
+          height: { ideal: this.isMobile ? 360 : 480 },
           frameRate: { ideal: 30, max: 60 },
         },
         audio: false,
       },
+      { video: { facingMode: { ideal: facingMode } }, audio: false },
       { video: true, audio: false },
     ];
 
@@ -273,7 +274,7 @@ export class CameraHandTracker {
       document.querySelectorAll('.preset-btn, .m-pose-btn').forEach((b) => b.classList.remove('active'));
       // 实时追踪期间大幅提升伺服响应速度，消除双层平滑延迟
       this.prevDampingSpeed = this.rig.dampingSpeed || 1.0;
-      this.rig.dampingSpeed = 3.2;
+      this.rig.dampingSpeed = 5.0;
 
       this._setStatus(this.arMode ? 'AR 对准人手即可替换' : '请将手放入镜头中', false);
       this.onStateChange?.({ active: true, facingMode: actualFacing, arMode: this.arMode });
@@ -347,8 +348,10 @@ export class CameraHandTracker {
     if (!video || video.readyState < 2 || video.videoWidth === 0 || !this.landmarker) return;
 
     const nowRaw = performance.now();
-    // 兼容部分手机 WebView/Safari 视频流 currentTime 更新较慢的情况：若时间推进或间隔超过 48ms 即允许推理
-    if (video.currentTime === this.lastVideoTime && nowRaw - this.lastFrameTickMs < 48) return;
+    // 手机端以 ~24fps（42ms 间隔）抽帧推理，避免 CPU WASM 占满主线程导致画面掉帧与视频队列堆积延迟
+    const minInterval = this.isMobile ? 42 : 16;
+    if (nowRaw - this.lastFrameTickMs < minInterval) return;
+    if (video.currentTime === this.lastVideoTime && nowRaw - this.lastFrameTickMs < 80) return;
     this.lastVideoTime = video.currentTime;
     this.lastFrameTickMs = nowRaw;
 
@@ -391,14 +394,14 @@ export class CameraHandTracker {
     }
 
     const pose = this._solvePoseFromLandmarks(worldLm, landmarks2D, handedness);
-    const alpha = 0.62;
+    const alpha = 0.82;
     for (const k of Object.keys(pose)) {
       if (k === 'forearmRot') {
         // 最短角度连续插值，支持 180° 掌心 <-> 手背无缝丝滑翻手！
         let diff = pose.forearmRot - this.smoothed.forearmRot;
         while (diff > 180) diff -= 360;
         while (diff < -180) diff += 360;
-        this.smoothed.forearmRot += diff * 0.45;
+        this.smoothed.forearmRot += diff * 0.72;
       } else {
         this.smoothed[k] = lerp(this.smoothed[k], pose[k], alpha);
       }
@@ -522,8 +525,9 @@ export class CameraHandTracker {
     const palmV = sub3(w[17], w[0]);
     const palmN = cross3(palmU, palmV);
     const nLen = len3(palmN);
-    // 统一掌心法向量方向（无论左手还是右手，以及前置镜像，掌心朝前时 nz 为正）
-    const handSign = handedness === 'Left' ? -1 : 1;
+    // MediaPipe HandLandmarker 默认按“镜像自拍图”假设输出 handedness，而原始 <video> 未镜像，
+    // 因此真实右手在原始帧中会标为 'Left'（w[5] 在左、w[17] 在右，palmN.z > 0 对应掌心朝镜头）
+    const handSign = handedness === 'Left' ? 1 : -1;
     const mirrorSign = this.isMirrored ? -1 : 1;
     const nx = (palmN.x / nLen) * handSign * mirrorSign;
     const ny = (palmN.y / nLen) * handSign;
